@@ -28,13 +28,17 @@ int main()
 
         // Write an action using cout. DON'T FORGET THE "<< endl"
         // To debug: cerr << "Debug messages..." << endl;
-        
+
+
+        // You have to output the target position
+        // followed by the power (0 <= thrust <= 100) or "BOOST"
+        // i.e.: "x y thrust"
         //Don't accelerate while backward
         int thrust;
         if (nextCheckpointAngle > 90 or nextCheckpointAngle <-90) {
             thrust = 0;
         }
         else thrust = 100;
-        cout << nextCheckpointX << " " << nextCheckpointY << " " << thrust << endl;
+        cout << nextCheckpointX << " " << nextCheckpointY << " " << "BOOST" << endl;
     }
 }
