@@ -23,7 +23,7 @@ bool operator==(const Point2D& a, const Point2D& b)
 }
 bool operator!=(const Point2D& a, const Point2D& b)
 {
-    return a.x != b.x || a.y == b.y;
+    return a.x != b.x || a.y != b.y;
 }
 Point2D operator+(const Point2D& a, const Point2D& b)
 {
@@ -49,7 +49,7 @@ Point2D operator*=(Point2D& a, float k)
 struct Lap {
     vector<Point2D> lap;
     int count;
-    Lap(vector<Point2D> list): lap(list),count(this->lap.size()){}
+    Lap(vector<Point2D> list): lap(list),count(list.size()){}
     Lap():lap(vector<Point2D>{Point2D()}),count(0){}
 };
 
@@ -99,12 +99,13 @@ class BoostManager{
     Point2D endTriger;
     //default constructor
     public :
-        BoostManager(){};
+        BoostManager(){
+        
+        };
     //Constructor
     public:
         BoostManager(Lap lap){
             this->lap = lap;
-            boostTrigger(this->lap);
         }
 
     //Determine if should boost based on longuest distances btw points
@@ -113,18 +114,17 @@ class BoostManager{
         return false;
     }
     //find boost triggering checkpoint
-    void boostTrigger(Lap Lap){
-        vector<vector<double>> distances (lap.count,vector<double>(lap.count,0));
-        for ( int i = 0; i < lap.count; i++)
+    void boostTrigger(){
+        vector<double> distances = vector<double>(this->lap.count,0);
+        for ( int i = 0; i <this-> lap.count; i++)
         {
-            for ( int j = i+1; j < lap.count; j++)
-            {
-             distances[i][j] = distance(lap.lap[i],lap.lap[j]) ;
-            } 
+            distances[i] = distance(this->lap.lap[i],this->lap.lap[((i+1)==lap.count) ? 0 : i+1]) ;
         }
-        vector<int> maxPos = findMax(distances);
-        this->startTriger = lap.lap[maxPos[0]];
-        this->endTriger = lap.lap[maxPos[1]];
+        int maxElementIndex = std::max_element(distances.begin(),distances.end()) - distances.begin();
+        this->startTriger = this->lap.lap[maxElementIndex];
+        this->endTriger = this->lap.lap[((maxElementIndex+1)==0)? 0:maxElementIndex+1];
+        cerr<<"Trigger"<<endl;
+        cerr<<maxElementIndex<<" "<<endl;
     }
 
 } ;
@@ -132,10 +132,9 @@ class BoostManager{
 int main()
 {
     vector<Point2D> checkpointList = vector<Point2D>();
-    BoostManager bm = BoostManager(Lap(checkpointList));
+    BoostManager bm;
     bool store = true;
     bool boost = false;
-
     // game loop
     while (1) {
         int x;
@@ -151,19 +150,26 @@ int main()
 
         Point2D newPoint = Point2D(nextCheckpointX,nextCheckpointY);
         //create lap
-        if(!checkpointList.empty() && checkpointList[0]!= newPoint && checkpointList[checkpointList.size()-1]!=newPoint &&store) 
+        if (checkpointList.empty()){
             checkpointList.push_back(newPoint);
-        else if (store)
-        {   store = false;
+        } 
+        else if(checkpointList[0]!=newPoint && store && checkpointList[checkpointList.size()-1]!=newPoint) {
+            checkpointList.push_back(newPoint);
+        }
+        else if (checkpointList[0]==newPoint && checkpointList[checkpointList.size()-1]!=newPoint && store) {   
+            cerr<<"Trigger"<<endl;
+            store = false;
             //lap known; initialize boost manager
             bm = BoostManager(Lap(checkpointList));
+            bm.boostTrigger();
         }
         if (!store) boost = bm.boost(newPoint);
-        //boost of accelerate based on case
-        if (boost==true) cout << nextCheckpointX << " " << nextCheckpointY << " " << "BOOST" << endl;
-        else cout << nextCheckpointX << " " << nextCheckpointY << " " << backwardNoAcceleration(nextCheckpointAngle) << endl;        
+        //boost or accelerate based on case
+        int thurst;
+        if (boost==true) cout<< nextCheckpointX << " " << nextCheckpointY << " " << "BOOST"<< endl;        
+        else cout<< nextCheckpointX << " " << nextCheckpointY << " " <<backwardNoAcceleration(nextCheckpointAngle)<< endl;        
+
     
     }
 
 }
-
