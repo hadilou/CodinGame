@@ -188,7 +188,7 @@ int main()
 
     const int angleToSteer = 1;
     const int angleSlowDown = 90;
-    const float slowDownRadius = 600*4;
+    const float slowDownRadius = 600*2;
 
     vector<Vector2D> checkpointList = vector<Vector2D>();
     BoostManager bm;
@@ -226,7 +226,6 @@ int main()
             bm.boostTrigger();
         }
         //find if should boost
-        if (!store) useBoost = bm.boost(newPoint);
         
         if(nextCheckpointAngle<= -angleToSteer || nextCheckpointAngle >= angleToSteer){
             //1. Seeking
@@ -239,14 +238,15 @@ int main()
             //Compensating
             nextCheckpointX += steeringDir.x;
             nextCheckpointY += steeringDir.x;
+            
 
             //Slow Down for angle
             if(nextCheckpointAngle<=-angleSlowDown || nextCheckpointAngle>=angleSlowDown){
                 thrust = 0;
             }
             else if (nextCheckpointDist < slowDownRadius) {
-                thrust*=(angleSlowDown - abs(nextCheckpointAngle))/ float(angleSlowDown);
-            }
+                    thrust*=(angleSlowDown - abs(nextCheckpointAngle))/ float(angleSlowDown);
+                }
         }
         else {
             if (useBoost){
@@ -257,6 +257,8 @@ int main()
                 thrust*= nextCheckpointDist / slowDownRadius;
             }
         }
+        if (nextCheckpointAngle>=-angleToSteer && nextCheckpointAngle<= angleToSteer && !store) useBoost = bm.boost(newPoint);
+
         
         //cout
         cout<<nextCheckpointX<<" "<<nextCheckpointY<<" ";
