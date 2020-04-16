@@ -8,7 +8,8 @@
 
 using namespace std;
 #define pi 3.14159265
-
+#define max_speed 100
+#define max_avoid_force 100
 //2D Point to simplify notations
 struct Vector2D
 {
@@ -180,15 +181,35 @@ class ThurstManager{
 
 };
 
+//Collision Avoidance 
+//https://gamedevelopment.tutsplus.com/tutorials/understanding-steering-behaviors-collision-avoidance--gamedev-7777
+
+Vector2D collisionAvoidance(Vector2D currentPos,Vector2D opponentPos,Vector2D velocity){
+    Vector2D avoidance = Vector2D();
+    Vector2D ahead = currentPos + normalize(velocity)* max_speed;
+    Vector2D ahead2 = currentPos + normalize(velocity)*max_speed * 0.5;
+
+    if(opponentPos!= Vector2D(0.0f,0.0f)) {
+        avoidance.x = ahead.x - opponentPos.x;
+        avoidance.y = ahead.y - opponentPos.y;
+
+        avoidance = normalize(avoidance);
+        avoidance = avoidance * max_avoid_force;
+    } else {
+        avoidance = avoidance * 0;
+    }
+
+    return avoidance;
+}
+
+
 int main()
 {
 
-    int prevX = 0;
-    int prevY = 0;
-
     const int angleToSteer = 1;
+    const int angleToBoost = 1;
     const int angleSlowDown = 90;
-    const float slowDownRadius = 600*2;
+    const float slowDownRadius = 600*4;
 
     vector<Vector2D> checkpointList = vector<Vector2D>();
     BoostManager bm;
@@ -225,21 +246,18 @@ int main()
             bm = BoostManager(Lap(checkpointList));
             bm.boostTrigger();
         }
-        //find if should boost
-        
+        //1. Seeking
+        Vector2D velocity(nextCheckpointX-x,nextCheckpointY-y);
+        velocity= normalize(velocity);
         if(nextCheckpointAngle<= -angleToSteer || nextCheckpointAngle >= angleToSteer){
-            //1. Seeking
-            Vector2D desiredDir(nextCheckpointX-x,nextCheckpointY-y);
-            desiredDir= normalize(desiredDir);
-            Vector2D currDir = rotate(desiredDir,-nextCheckpointAngle);
+            
+            Vector2D currDir = rotate(velocity,-nextCheckpointAngle);
             currDir = normalize(currDir);
-            Vector2D steeringDir = desiredDir - currDir;
+            Vector2D steeringDir = velocity - currDir;
             steeringDir = normalize(steeringDir) * 100;
             //Compensating
             nextCheckpointX += steeringDir.x;
             nextCheckpointY += steeringDir.x;
-            
-
             //Slow Down for angle
             if(nextCheckpointAngle<=-angleSlowDown || nextCheckpointAngle>=angleSlowDown){
                 thrust = 0;
@@ -257,9 +275,11 @@ int main()
                 thrust*= nextCheckpointDist / slowDownRadius;
             }
         }
-        if (nextCheckpointAngle>=-angleToSteer && nextCheckpointAngle<= angleToSteer && !store) useBoost = bm.boost(newPoint);
-
-        
+        if (nextCheckpointAngle>=-angleToBoost && nextCheckpointAngle<= angleToBoost && !store) useBoost = bm.boost(newPoint);
+        //Obstacle Avoidance
+        Vector2D avoidanceForce = collisionAvoidance(newPoint,Vector2D(opponentX,opponentY),velocity);
+        nextCheckpointX+=avoidanceForce.x;
+        nextCheckpointY+=avoidanceForce.y;
         //cout
         cout<<nextCheckpointX<<" "<<nextCheckpointY<<" ";
         if(useBoost){
