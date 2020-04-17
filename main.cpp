@@ -168,14 +168,14 @@ float relativeAngle (int angle,Vector2D target,Vector2D pod) {
 //Pod simplication
 class Pod
 {
-    public:
+    private:
         Vector2D pos;
         Vector2D speed;
         int absAngle;
         int checkpointId;
         bool boostAvailable;
         Vector2D nexCheckpoint;
-        int thrust;
+        int thrust =maxThrust;
         bool useBoost;
 
     public:
@@ -208,7 +208,7 @@ class Pod
 int findThrust(Pod& pod, int checkpointToBoost) {
     const Vector2D target = pod.NextCheckpoint();
     int thrust = maxThrust;
-    Vector2D velocity(target-pod.pos);
+    Vector2D velocity(target-pod.Position());
     velocity = normalize(velocity)*max_speed;
     const float nextCheckpointDist = distance(target, pod.Position());
     const float relAngle = relativeAngle(pod.Angle(),target,pod.Position()) - pod.Angle();
@@ -219,33 +219,24 @@ int findThrust(Pod& pod, int checkpointToBoost) {
         Vector2D steeringDir = velocity - currDir;
         steeringDir = normalize(steeringDir) * 100;
         //Compensating for seeking
-        pod.SetnextCheckpoint(pod.NextCheckpoint()+steeringDir);
+       pod.SetnextCheckpoint(pod.NextCheckpoint()+steeringDir);
+        pod.SetnextCheckpoint(target - (k * pod.Speed()));
+
         if(relAngle<=-angleSlowDown || relAngle>=angleSlowDown){
             thrust = 0;
         }
         else if (nextCheckpointDist < slowDownRadius) {
-                thrust=maxThrust*(angleSlowDown - abs(relAngle))/ float(angleSlowDown);
+                thrust = 100;
+               // thrust=maxThrust*(angleSlowDown - abs(relAngle))/ float(angleSlowDown);
             }
     }
     else {
         if (nextCheckpointDist <slowDownRadius) {
             //Slow down for radius
-            thrust = maxThrust* nextCheckpointDist / slowDownRadius;
+            thrust = 100;
+            //thrust = maxThrust* nextCheckpointDist / slowDownRadius;
         }
     }
-    // if (pod.Angle()<angleToSteer) {
-    //     thrust = maxThrust;    
-    // }
-    // else {
-    //     // try to avoid drifts
-    //     pod.SetnextCheckpoint(target - float(k * pod.Speed()));
-    //     // in order to align, we also need to reduce the thrust
-    //     const float dist = distance(target, pod.Position());
-    //     const float distanceSlowdownFactor = clamp(dist/(slowDownRadius), 0.f, 1.f);
-    //     const float angleSlowdownFactor = 1.f - clamp(abs(relAngle)/90.f, 0.f, 1.f);
-    //     cerr << "Slowdown: distance " << distanceSlowdownFactor << " - angle " << angleSlowdownFactor << endl;
-    //     thrust -= maxThrust * distanceSlowdownFactor * angleSlowdownFactor;
-    // }
     return thrust;
 }
 
@@ -293,10 +284,14 @@ int main()
          }
         
         //outputs
-        cout << pods[0].NextCheckpoint().x << " " << pods[0].NextCheckpoint().y << " ";
+        cout << int(pods[0].NextCheckpoint().x) << " " << int(pods[0].NextCheckpoint().y )<< " ";
         if (pods[0].boost()) cout << "BOOST";
         else cout << pods[0].getThrust();
         cout<<endl;
-        cout<<"0 0 100"<<endl;
+        cout << int(pods[1].NextCheckpoint().x) << " " << int(pods[1].NextCheckpoint().y )<< " ";
+        if (pods[1].boost()) cout << "BOOST";
+        else cout << pods[1].getThrust();
+        cout<<endl;
+
     }
 }
