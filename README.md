@@ -1,2 +1,2 @@
 # CodinGame Coders Strike Back Game Solution in Cpp
-# Current Level: Bronze
+Current Level: Gold
