@@ -9,7 +9,21 @@
 using namespace std;
 #define pi 3.14159265
 #define max_speed 100
+#define max_oversee_ahead 2000
 #define max_avoid_force 100
+#define radius_pot 400 * 2
+
+
+
+const int angleToSteer = 1;
+const int angleToBoost = 5;
+const int  maxThrust = 100;
+const int angleSlowDown = 90;
+const int k = 2;
+const float slowDownRadius = 600*k;
+const int rotationFactor = 4;
+
+
 //2D Point to simplify notations
 struct Vector2D
 {
@@ -19,7 +33,15 @@ struct Vector2D
     Vector2D() : x(0.f), y(0.f) {}
    
 };
+//Circle data type
+struct Circle {
+    double r;//radius
+    Vector2D center;//center point
+    Circle(Vector2D _center,float _r):center(_center),r(_r){};
+    //empty circle at the center(0,0)
+    Circle():center(Vector2D(0.0,0.0)),r(0.0){};
 
+};
 bool operator==(const Vector2D& a, const Vector2D& b)
 {
     return a.x == b.x && a.y == b.y;
@@ -66,7 +88,6 @@ Vector2D normalize( const Vector2D& v ) {
     return v * float(1.0/length(v));
 }
 
-inline
 Vector2D rotate( const Vector2D& v, float angle ) {
     float radian = angle * pi / 180;
     double sinAngle = sin(radian);
@@ -142,7 +163,7 @@ class BoostManager{
     //Determine if should boost based on longuest distances btw points
     bool boost(Vector2D currentCheckpoint){
         int boost;
-        if (currentCheckpoint == startTriger) {
+        if (currentCheckpoint == endTriger) {
             boost = true && this->boostAvailable ;
             this->boostAvailable = false;
         }
@@ -159,8 +180,8 @@ class BoostManager{
         int maxElementIndex = std::max_element(distances.begin(),distances.end()) - distances.begin();
         this->startTriger = this->lap.lap[maxElementIndex];
         this->endTriger = this->lap.lap[((maxElementIndex+1)==0)? 0:maxElementIndex+1];
-        cerr<<"Trigger"<<endl;
-        cerr<<maxElementIndex<<" "<<endl;
+        cerr<<"Boost Triggered at checkpoint";
+        cerr<<maxElementIndex+1<<endl;
     }
 
 } ;
@@ -183,34 +204,47 @@ class ThurstManager{
 
 //Collision Avoidance 
 //https://gamedevelopment.tutsplus.com/tutorials/understanding-steering-behaviors-collision-avoidance--gamedev-7777
+//Fint if the line intersect the circle defined by its radius and center 
+
+bool lineIntersectedCircle(Vector2D ahead,Vector2D ahead2,Circle obstacle){
+    
+    bool result = distance(obstacle.center,ahead) <= obstacle.r || distance(obstacle.center,ahead2)<=obstacle.r;
+    cerr<<"Collision: "<<result<<endl;
+    return result;
+}
 
 Vector2D collisionAvoidance(Vector2D currentPos,Vector2D opponentPos,Vector2D velocity){
     Vector2D avoidance = Vector2D();
-    Vector2D ahead = currentPos + normalize(velocity)* max_speed;
-    Vector2D ahead2 = currentPos + normalize(velocity)*max_speed * 0.5;
+    Vector2D ahead = currentPos + normalize(velocity)* max_oversee_ahead;
+    float dynamic_length = length(velocity) / max_oversee_ahead;
+    ahead*=dynamic_length;
+    Vector2D ahead2 = currentPos + normalize(velocity)*max_oversee_ahead * 0.5;
 
-    if(opponentPos!= Vector2D(0.0f,0.0f)) {
+    if (lineIntersectedCircle(ahead,ahead2,Circle(opponentPos,radius_pot))) {
+        cerr<<"Collision Happened"<<endl;
         avoidance.x = ahead.x - opponentPos.x;
         avoidance.y = ahead.y - opponentPos.y;
 
         avoidance = normalize(avoidance);
         avoidance = avoidance * max_avoid_force;
-    } else {
-        avoidance = avoidance * 0;
     }
-
     return avoidance;
 }
-
+//Regularize shield Usage, shield allows to have more weights during collisions
+bool shield(Vector2D pod,Vector2D opponent,int nextCheckpointAngle,int prevX,int prevY){
+    if(nextCheckpointAngle >= -angleToSteer && nextCheckpointAngle<=angleToSteer){
+        return distance(pod,opponent) < slowDownRadius;// && dot(opponent-pod,(Vector2D(prevX,prevY)-pod))>k;
+    }
+    return false;
+}
 
 int main()
 {
+    int prevX = 0;
+    int prevY = 0;
 
-    const int angleToSteer = 1;
-    const int angleToBoost = 1;
-    const int angleSlowDown = 90;
-    const float slowDownRadius = 600*4;
-
+ 
+    
     vector<Vector2D> checkpointList = vector<Vector2D>();
     BoostManager bm;
     ThurstManager tm;
@@ -230,7 +264,7 @@ int main()
 
         int thrust = 100;//initialize acceleration to its max
         int useBoost  = false ;//know if should use boost or not
-        
+        int useShield = false;// if shield should be used or not
         Vector2D newPoint = Vector2D(nextCheckpointX,nextCheckpointY);
         //create lap
         if (checkpointList.empty()){
@@ -246,16 +280,16 @@ int main()
             bm = BoostManager(Lap(checkpointList));
             bm.boostTrigger();
         }
-        //1. Seeking
+        //Thrust Management
         Vector2D velocity(nextCheckpointX-x,nextCheckpointY-y);
-        velocity= normalize(velocity);
+        velocity = normalize(velocity)*max_speed;
         if(nextCheckpointAngle<= -angleToSteer || nextCheckpointAngle >= angleToSteer){
             
             Vector2D currDir = rotate(velocity,-nextCheckpointAngle);
             currDir = normalize(currDir);
             Vector2D steeringDir = velocity - currDir;
             steeringDir = normalize(steeringDir) * 100;
-            //Compensating
+            //Compensating for seeking
             nextCheckpointX += steeringDir.x;
             nextCheckpointY += steeringDir.x;
             //Slow Down for angle
@@ -263,7 +297,7 @@ int main()
                 thrust = 0;
             }
             else if (nextCheckpointDist < slowDownRadius) {
-                    thrust*=(angleSlowDown - abs(nextCheckpointAngle))/ float(angleSlowDown);
+                    thrust=maxThrust*(angleSlowDown - abs(nextCheckpointAngle))/ float(angleSlowDown);
                 }
         }
         else {
@@ -272,12 +306,26 @@ int main()
             }
             else if (nextCheckpointDist <slowDownRadius) {
                 //Slow down for radius
-                thrust*= nextCheckpointDist / slowDownRadius;
+                thrust = maxThrust* nextCheckpointDist / slowDownRadius;
             }
         }
-        if (nextCheckpointAngle>=-angleToBoost && nextCheckpointAngle<= angleToBoost && !store) useBoost = bm.boost(newPoint);
+        //Rotate more smoothly using pos's speed
+        int vx = x - prevX;
+        int vy = y - prevY;
+        nextCheckpointX+=-rotationFactor*vx;
+        nextCheckpointY+=-rotationFactor*vy;
+        //Boosting
+        if (nextCheckpointAngle>=-angleToBoost && nextCheckpointAngle<= angleToBoost) {
+            useBoost = bm.boost(newPoint) && (!store);
+            useShield = (shield(Vector2D(x,y),Vector2D(opponentX,opponentY),nextCheckpointAngle,prevX,prevY));
+        }
         //Obstacle Avoidance
-        Vector2D avoidanceForce = collisionAvoidance(newPoint,Vector2D(opponentX,opponentY),velocity);
+        Vector2D avoidanceForce = collisionAvoidance(Vector2D(x,y),Vector2D(opponentX,opponentY),velocity);
+        cerr<<"Opponent: X "<<opponentX<<" Y "<<opponentY<<endl;
+        cerr<<"Avoidance: "<<avoidanceForce.x<<" "<<avoidanceForce.y<<endl;
+        cerr<<"Pos:"<<"X "<<x<<" Y "<<y<<endl;
+        cerr<<"Shield: "<<useShield<<endl;
+        cerr<<"Boost: "<<useBoost<<endl;
         nextCheckpointX+=avoidanceForce.x;
         nextCheckpointY+=avoidanceForce.y;
         //cout
@@ -285,9 +333,14 @@ int main()
         if(useBoost){
             cout<<"BOOST"<<endl;
         }
+        else if (useShield){
+            cout<<"SHIELD"<<endl;
+        }
         else {
             cout<<thrust<<endl;
         }
+        prevX = x;
+        prevY = y;
     
     }
 
