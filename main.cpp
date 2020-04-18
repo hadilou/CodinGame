@@ -19,7 +19,7 @@ const int angleToSteer = 1;
 const int angleToBoost = 5;
 const int  maxThrust = 100;
 const int angleSlowDown = 90;
-const int k = 25;
+const int k = 2;
 const float slowDownRadius = 600*k;
 const int rotationFactor = 4;
 
@@ -109,6 +109,13 @@ float distance(Vector2D a,Vector2D b)
     // Calculating distance 
     Vector2D temp = a-b;
     return sqrt(pow(temp.x,2)+pow(temp.y,2)); 
+} 
+//Returns distance between two points
+float distanceSquared(Vector2D a,Vector2D b) 
+{ 
+    // Calculating distance 
+    Vector2D temp = a-b;
+    return (pow(temp.x,2)+pow(temp.y,2)); 
 } 
 //A class to manage boost usage
 class BoostManager{
@@ -205,7 +212,7 @@ class Pod
         }
 };
 
-int findThrust(Pod& pod, int checkpointToBoost) {
+void findThrust(Pod& pod) {
     const Vector2D target = pod.NextCheckpoint();
     int thrust = maxThrust;
     Vector2D velocity(target-pod.Position());
@@ -219,25 +226,58 @@ int findThrust(Pod& pod, int checkpointToBoost) {
         Vector2D steeringDir = velocity - currDir;
         steeringDir = normalize(steeringDir) * 100;
         //Compensating for seeking
-       pod.SetnextCheckpoint(pod.NextCheckpoint()+steeringDir);
+        pod.SetnextCheckpoint(pod.NextCheckpoint()+steeringDir);
         pod.SetnextCheckpoint(target - (k * pod.Speed()));
 
         if(relAngle<=-angleSlowDown || relAngle>=angleSlowDown){
-            thrust = 0;
+            pod.SetThrust(0);
         }
         else if (nextCheckpointDist < slowDownRadius) {
-                thrust = 100;
-               // thrust=maxThrust*(angleSlowDown - abs(relAngle))/ float(angleSlowDown);
+
+            pod.SetThrust(maxThrust*(angleSlowDown - abs(relAngle))/ float(angleSlowDown) );
             }
     }
     else {
         if (nextCheckpointDist <slowDownRadius) {
             //Slow down for radius
-            thrust = 100;
-            //thrust = maxThrust* nextCheckpointDist / slowDownRadius;
+            pod.SetThrust(maxThrust* nextCheckpointDist / slowDownRadius);
         }
     }
-    return thrust;
+}
+
+bool ComputeThrust(Pod& p)
+{
+    if (p.Angle()<1) // we have the right trajectory, just go as fast as possible
+    {
+        p.SetThrust(maxThrust);
+    }
+    else // we need to adjust our trajectory
+    {
+        const Vector2D cp = p.NextCheckpoint();
+
+        // try to avoid drifts
+        p.SetnextCheckpoint(cp - (3.f * p.Speed()));
+
+        // in order to align, we also need to reduce the thrust
+
+        const float distToCp = distanceSquared(cp, p.Position());
+        const float distanceSlowdownFactor = clamp(distToCp/(slowDownRadius), 0.f, 1.f);
+
+        const float cpAngle = [&]() -> float
+        {
+            const Vector2D dirToCp = normalize(cp - p.Position());
+            float res = acos(dirToCp.x) * 180.f / pi;
+            if (dirToCp.y < 0.f)
+                return 360.f - res;
+            else
+                return res;
+        }();
+        const float angle = cpAngle - p.Angle();
+        const float angleSlowdownFactor = 1.f - clamp(abs(angle)/90.f, 0.f, 1.f);
+
+        cerr << "Slowdown: distance " << distanceSlowdownFactor << " - angle " << angleSlowdownFactor << endl;
+        p.SetThrust(maxThrust * distanceSlowdownFactor * angleSlowdownFactor);
+    }
 }
 
 int main()
@@ -246,20 +286,19 @@ int main()
     cin >> laps; cin.ignore();
     int checkpointCount;
     cin >> checkpointCount; cin.ignore();
-    
-    vector<Vector2D> checkpointList ; //list of checkpoints
+    vector<Vector2D> checkpointList (checkpointCount); //list of checkpoints
     BoostManager bm;
     for (int i = 0; i < checkpointCount; i++) {
         int checkpointX;
         int checkpointY;
         cin >> checkpointX >> checkpointY; cin.ignore();
-        checkpointList.push_back(Vector2D(checkpointX,checkpointY));  
+        checkpointList[i]=(Vector2D(checkpointX,checkpointY));  
     }
     //initialize bm
     bm = BoostManager(Lap(checkpointList));
     
-    vector<Pod> pods = vector<Pod>(checkpointCount);
-    vector<Pod> opps = vector<Pod>(checkpointCount);
+    vector<Pod> pods(2);
+    vector<Pod> opps (2);
     // game loop
     while (1) {
         for (int i = 0; i < 2; i++) {
@@ -271,27 +310,29 @@ int main()
             int nextCheckPointId; // next check point id of your pod
             cin >> x >> y >> vx >> vy >> angle >> nextCheckPointId; cin.ignore();
             pods[i].init(x,y,vx,vy,angle,nextCheckPointId);
+            
         }
       
         //set next checkpoint,check boost and computer thrust for pods
         for (int i= 0; i< 2;i++){
             pods[i].SetnextCheckpoint(checkpointList[pods[i].CheckpointId()]);//set next checkpoint
             if (pods[i].Angle() >=-angleToBoost && pods[i].Angle()<=angleToBoost) {
+                
                 pods[i].setBoostAvailable(bm.boost(pods[i].NextCheckpoint()));//find thrust
-                }//check boost
-            pods[i].SetThrust(findThrust(pods[i],pods[i].CheckpointId()));
+                
+            }
+            ComputeThrust(pods[i]);
+            //findThrust(pods[i]);
 
          }
-        
+
         //outputs
-        cout << int(pods[0].NextCheckpoint().x) << " " << int(pods[0].NextCheckpoint().y )<< " ";
-        if (pods[0].boost()) cout << "BOOST";
-        else cout << pods[0].getThrust();
-        cout<<endl;
-        cout << int(pods[1].NextCheckpoint().x) << " " << int(pods[1].NextCheckpoint().y )<< " ";
-        if (pods[1].boost()) cout << "BOOST";
-        else cout << pods[1].getThrust();
-        cout<<endl;
+        for (int i=0;i<2;i++) {
+            cout << int(pods[i].NextCheckpoint().x) << " " << int(pods[i].NextCheckpoint().y )<< " ";
+            if (pods[i].boost()) cout << "BOOST";
+            else cout << pods[i].getThrust();
+            cout<<endl;
+        }    
 
     }
 }
