@@ -5,3 +5,4 @@ Please check [CodinGame](https://www.codingame.com/multiplayer/bot-programming/c
 
 Current level: Gold
 
+Chexk commit history for versions of other levels
